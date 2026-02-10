@@ -1,0 +1,68 @@
+version: "3.9"
+
+services:
+  kong-db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: kong
+      POSTGRES_DB: kong
+      POSTGRES_PASSWORD: kong
+    volumes:
+      - kong_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kong -d kong"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  kong-migrations:
+    image: kong/kong:latest
+    command: kong migrations bootstrap
+    depends_on:
+      kong-db:
+        condition: service_healthy
+    environment:
+      KONG_DATABASE: postgres
+      KONG_PG_HOST: kong-db
+      KONG_PG_DATABASE: kong
+      KONG_PG_USER: kong
+      KONG_PG_PASSWORD: kong
+    restart: "no"
+
+  kong:
+    image: kong/kong:latest
+    depends_on:
+      kong-db:
+        condition: service_healthy
+      kong-migrations:
+        condition: service_completed_successfully
+    environment:
+      KONG_DATABASE: postgres
+      KONG_PG_HOST: kong-db
+      KONG_PG_DATABASE: kong
+      KONG_PG_USER: kong
+      KONG_PG_PASSWORD: kong
+      KONG_ADMIN_LISTEN: 0.0.0.0:8001
+      KONG_PROXY_LISTEN: 0.0.0.0:8000
+      KONG_ADMIN_ACCESS_LOG: /dev/stdout
+      KONG_ADMIN_ERROR_LOG: /dev/stderr
+      KONG_PROXY_ACCESS_LOG: /dev/stdout
+      KONG_PROXY_ERROR_LOG: /dev/stderr
+    ports:
+      - "8000:8000"
+      - "8001:8001"
+    restart: unless-stopped
+
+  whoami-a:
+    image: traefik/whoami:v1.10.1
+    container_name: whoami-a
+    restart: unless-stopped
+
+  whoami-b:
+    image: traefik/whoami:v1.10.1
+    container_name: whoami-b
+    restart: unless-stopped
+
+volumes:
+  kong_db_data:
